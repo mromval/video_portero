@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sip_ua/sip_ua.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:media_kit/media_kit.dart'; // Importante para el video
 import 'services/sip_service.dart';
-import 'widgets/camera_widget.dart';
+import 'widgets/camera_widget.dart'; // Asegúrate de que este archivo exista en esa ruta
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized(); // <--- AGREGAR ESTO
-  MediaKit.ensureInitialized();              // <--- Y ESTO (VITAL)
+  WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized(); // Inicializamos el motor de video
   runApp(const MaterialApp(home: MyApp()));
 }
 
@@ -21,10 +21,14 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
   String _status = "Desconectado";
   Call? _currentCall; // Aquí guardamos la llamada entrante
   
-  // --- TUS DATOS ---
+  // --- TUS DATOS DE CONEXIÓN ---
   final String _serverIP = '100.81.27.88'; 
   final String _extension = '201'; 
   final String _password = '1234';
+
+  // --- TU CÁMARA ONVIF (RTSP) ---
+  // Nota: Para ver esto, el celular debe estar en la misma red WiFi que la cámara (192.168.2.x)
+  final String _streamUrl = "rtsp://admin:Db930d71@192.168.2.186:554/onvif1";
 
   @override
   void initState() {
@@ -54,7 +58,7 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     }
   }
 
-  // --- LISTENERS ---
+  // --- LISTENERS DE SIP ---
   @override
   void registrationStateChanged(RegistrationState state) {
     setState(() { _status = state.state.toString(); });
@@ -65,10 +69,9 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     print("ESTADO LLAMADA: ${state.state}");
     
     setState(() {
-      _currentCall = call; // Guardamos la llamada activa
+      _currentCall = call; 
     });
 
-    // Si entra una llamada, mostramos la alerta o cambiamos la UI
     if (state.state == CallStateEnum.CALL_INITIATION) {
        print("🔔 ¡TIMBRE! Llamada entrante...");
     }
@@ -88,13 +91,15 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     return Scaffold(
       appBar: AppBar(title: const Text("Romval Portero")),
       body: Center(
-        child: _currentCall == null || _currentCall!.state == CallStateEnum.ENDED
-            ? _buildPantallaConexion() // Si no hay llamada, muestra conectar
-            : _buildPantallaLlamada(), // Si hay llamada, muestra botones
+        // Lógica para decidir qué pantalla mostrar: Conexión o Llamada
+        child: _currentCall == null || _currentCall!.state == CallStateEnum.ENDED || _currentCall!.state == CallStateEnum.FAILED
+            ? _buildPantallaConexion() 
+            : _buildPantallaLlamada(), 
       ),
     );
   }
 
+  // --- PANTALLA 1: CONEXIÓN ---
   Widget _buildPantallaConexion() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -108,33 +113,55 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     );
   }
 
+  // --- PANTALLA 2: LLAMADA CON VIDEO DE FONDO ---
   Widget _buildPantallaLlamada() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Stack(
       children: [
-        const Text("📞 LLAMADA ENTRANTE", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        Text("De: ${_currentCall?.remote_display_name ?? 'Portero'}", style: const TextStyle(fontSize: 18)),
-        const SizedBox(height: 50),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            // Botón Colgar
-            FloatingActionButton(
-              onPressed: _colgar,
-              backgroundColor: Colors.red,
-              child: const Icon(Icons.call_end),
-            ),
-            // Botón Contestar
-            FloatingActionButton(
-              onPressed: _contestar,
-              backgroundColor: Colors.green,
-              child: const Icon(Icons.call),
-            ),
-          ],
+        // CAPA 1: El Video de fondo (Cámara RTSP)
+        Positioned.fill(
+          child: CameraWidget(rtspUrl: _streamUrl),
         ),
-        const SizedBox(height: 20),
-        if (_currentCall!.state == CallStateEnum.CONFIRMED)
-           const Text("🔴 EN LÍNEA - HABLANDO", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+        
+        // CAPA 2: Un oscurecedor para que se lean las letras
+        Positioned.fill(
+          child: Container(color: Colors.black45),
+        ),
+
+        // CAPA 3: Los botones y textos
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text("📞 LLAMADA ENTRANTE", 
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text("De: ${_currentCall?.remote_display_name ?? 'Portero'}", 
+                  style: const TextStyle(fontSize: 18, color: Colors.white)),
+              const SizedBox(height: 300), // Espacio libre para ver la imagen
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Botón Colgar
+                  FloatingActionButton(
+                    onPressed: _colgar,
+                    backgroundColor: Colors.red,
+                    heroTag: "btnColgar",
+                    child: const Icon(Icons.call_end),
+                  ),
+                  // Botón Contestar
+                  FloatingActionButton(
+                    onPressed: _contestar,
+                    backgroundColor: Colors.green,
+                    heroTag: "btnContestar",
+                    child: const Icon(Icons.call),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (_currentCall!.state == CallStateEnum.CONFIRMED)
+                 const Text("🔴 EN LÍNEA - HABLANDO", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+            ],
+          ),
+        ),
       ],
     );
   }
