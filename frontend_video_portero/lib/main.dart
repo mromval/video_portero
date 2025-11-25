@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sip_ua/sip_ua.dart';
+import 'package:media_kit/media_kit.dart';
 import 'services/sip_service.dart';
+import 'widgets/camera_widget.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized(); // <--- AGREGAR ESTO
+  MediaKit.ensureInitialized();              // <--- Y ESTO (VITAL)
   runApp(const MaterialApp(home: MyApp()));
 }
 
