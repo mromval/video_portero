@@ -20,24 +20,28 @@ class _CameraWidgetState extends State<CameraWidget> {
     super.initState();
     player = Player();
     
-    // 1. Configuración del controlador: Usamos aceleración por hardware para fluidez
     controller = VideoController(
       player,
       configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true, 
+        enableHardwareAcceleration: false, // Mantener false por ahora
       ),
     );
 
-    // 2. ABRIR CON MODO "BAJA LATENCIA" (Low Latency)
-    // Estos parámetros son vitales para que sea "en vivo" y no con retraso
+    // Escuchar errores
+    player.stream.error.listen((error) {
+      print("🚨 ERROR MEDIA_KIT: $error");
+    });
+
+    // ABRIR EN MODO COMPATIBILIDAD
+    // Quitamos 'nobuffer' y 'analyzeduration' para dejar que detecte el formato
     player.open(
       Media(
         widget.rtspUrl,
         extras: {
-          'rtsp_transport': 'tcp', // TCP evita píxeles grises/verdes si el wifi falla
-          'fflags': 'nobuffer',    // ¡IMPORTANTE! No guardar buffer, reproducir YA
-          'analyzeduration': '0',  // No analizar el stream, mostrar directo
-          'probesize': '32',       // Mínimo análisis de paquetes para arranque rápido
+          'rtsp_transport': 'tcp', // TCP sigue siendo vital para no perder paquetes
+          // Si sigue fallando, prueba descomentar la siguiente línea para forzar ffmpeg a analizar más profundo:
+          // 'probesize': '10000000', // 10MB de análisis
+          // 'analyzeduration': '5000000', // 5 segundos de análisis
         },
       ),
       play: true,
@@ -46,7 +50,6 @@ class _CameraWidgetState extends State<CameraWidget> {
 
   @override
   void dispose() {
-    // ¡Muy importante liberar memoria al cerrar la llamada!
     player.dispose();
     super.dispose();
   }
@@ -54,13 +57,28 @@ class _CameraWidgetState extends State<CameraWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black, // Fondo negro estético
-      child: Center(
-        child: Video(
-          controller: controller,
-          fit: BoxFit.cover, // 'cover' llena la pantalla, 'contain' muestra bordes negros
-          controls: NoVideoControls, // Ocultamos barra de play/pausa
-        ),
+      color: Colors.black,
+      child: Stack(
+        children: [
+          Center(
+            child: Video(
+              controller: controller,
+              fit: BoxFit.cover,
+              controls: NoVideoControls,
+            ),
+          ),
+          Center(
+            child: StreamBuilder<bool>(
+              stream: player.stream.buffering,
+              builder: (context, snapshot) {
+                if (snapshot.data == true) {
+                  return const CircularProgressIndicator(color: Colors.white);
+                }
+                return const SizedBox();
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

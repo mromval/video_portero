@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sip_ua/sip_ua.dart';
-import 'package:media_kit/media_kit.dart'; // Importante para el video
+import 'package:media_kit/media_kit.dart'; 
 import 'services/sip_service.dart';
-import 'widgets/camera_widget.dart'; // Asegúrate de que este archivo exista en esa ruta
+import 'widgets/camera_widget.dart'; 
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized(); // Inicializamos el motor de video
+  MediaKit.ensureInitialized(); 
   runApp(const MaterialApp(home: MyApp()));
 }
 
@@ -19,16 +19,17 @@ class MyApp extends StatefulWidget {
 
 class MyAppState extends State<MyApp> implements SipUaHelperListener {
   String _status = "Desconectado";
-  Call? _currentCall; // Aquí guardamos la llamada entrante
+  Call? _currentCall;
+  bool _testingCamera = false; // NUEVO: Variable para saber si estamos probando video
   
-  // --- TUS DATOS DE CONEXIÓN ---
+  // --- TUS DATOS ---
   final String _serverIP = '100.81.27.88'; 
   final String _extension = '201'; 
   final String _password = '1234';
 
-  // --- TU CÁMARA ONVIF (RTSP) ---
-  // Nota: Para ver esto, el celular debe estar en la misma red WiFi que la cámara (192.168.2.x)
-  final String _streamUrl = "rtsp://admin:Db930d71@192.168.2.186:554/onvif1";
+  // --- TU CÁMARA ---
+  // RECUERDA: El celular DEBE estar en el mismo WiFi que la cámara (192.168.2.x)
+  final String _streamUrl = "rtsp://admin:Db930d71@192.168.2.186:554/onvif2";
 
   @override
   void initState() {
@@ -45,6 +46,12 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     SIPService.instance.register(_extension, _password, _serverIP);
   }
 
+  void _toggleCameraTest() {
+    setState(() {
+      _testingCamera = !_testingCamera; // Activa o desactiva el modo prueba
+    });
+  }
+
   // --- ACCIONES DE LLAMADA ---
   void _contestar() {
     if (_currentCall != null) {
@@ -58,7 +65,7 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     }
   }
 
-  // --- LISTENERS DE SIP ---
+  // --- LISTENERS ---
   @override
   void registrationStateChanged(RegistrationState state) {
     setState(() { _status = state.state.toString(); });
@@ -67,12 +74,11 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
   @override
   void callStateChanged(Call call, CallState state) {
     print("ESTADO LLAMADA: ${state.state}");
+    setState(() { _currentCall = call; });
     
-    setState(() {
-      _currentCall = call; 
-    });
-
+    // Si entra llamada, apagamos el modo prueba para atender
     if (state.state == CallStateEnum.CALL_INITIATION) {
+       setState(() { _testingCamera = false; });
        print("🔔 ¡TIMBRE! Llamada entrante...");
     }
   }
@@ -91,15 +97,26 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
     return Scaffold(
       appBar: AppBar(title: const Text("Romval Portero")),
       body: Center(
-        // Lógica para decidir qué pantalla mostrar: Conexión o Llamada
-        child: _currentCall == null || _currentCall!.state == CallStateEnum.ENDED || _currentCall!.state == CallStateEnum.FAILED
-            ? _buildPantallaConexion() 
-            : _buildPantallaLlamada(), 
+        child: _decidirPantalla(),
       ),
     );
   }
 
-  // --- PANTALLA 1: CONEXIÓN ---
+  // Lógica para elegir qué mostrar
+  Widget _decidirPantalla() {
+    // 1. Si hay llamada activa -> Pantalla de Llamada
+    if (_currentCall != null && _currentCall!.state != CallStateEnum.ENDED && _currentCall!.state != CallStateEnum.FAILED) {
+      return _buildPantallaLlamada();
+    }
+    // 2. Si estamos probando cámara -> Pantalla de Video Test
+    if (_testingCamera) {
+      return _buildPantallaTestCamara();
+    }
+    // 3. Si no -> Pantalla de Conexión normal
+    return _buildPantallaConexion();
+  }
+
+  // --- PANTALLA 1: CONEXIÓN + BOTÓN TEST ---
   Widget _buildPantallaConexion() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -109,45 +126,65 @@ class MyAppState extends State<MyApp> implements SipUaHelperListener {
         Text(_status, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue)),
         const SizedBox(height: 30),
         ElevatedButton(onPressed: _conectar, child: const Text("Conectar a CasaOS")),
+        const SizedBox(height: 50),
+        
+        // BOTÓN NUEVO PARA PROBAR VIDEO
+        ElevatedButton.icon(
+          onPressed: _toggleCameraTest,
+          icon: const Icon(Icons.videocam),
+          label: const Text("PROBAR CÁMARA AHORA"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.all(20)
+          ),
+        ),
       ],
     );
   }
 
-  // --- PANTALLA 2: LLAMADA CON VIDEO DE FONDO ---
+  // --- PANTALLA NUEVA: SOLO VIDEO ---
+  Widget _buildPantallaTestCamara() {
+    return Stack(
+      children: [
+        CameraWidget(rtspUrl: _streamUrl),
+        Positioned(
+          bottom: 50,
+          left: 0, right: 0,
+          child: Center(
+            child: ElevatedButton(
+              onPressed: _toggleCameraTest, // Volver atrás
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text("CERRAR VIDEO", style: TextStyle(color: Colors.white)),
+            ),
+          ),
+        )
+      ],
+    );
+  }
+
+  // --- PANTALLA 2: LLAMADA REAL ---
   Widget _buildPantallaLlamada() {
     return Stack(
       children: [
-        // CAPA 1: El Video de fondo (Cámara RTSP)
-        Positioned.fill(
-          child: CameraWidget(rtspUrl: _streamUrl),
-        ),
-        
-        // CAPA 2: Un oscurecedor para que se lean las letras
-        Positioned.fill(
-          child: Container(color: Colors.black45),
-        ),
-
-        // CAPA 3: Los botones y textos
+        Positioned.fill(child: CameraWidget(rtspUrl: _streamUrl)),
+        Positioned.fill(child: Container(color: Colors.black45)),
         Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text("📞 LLAMADA ENTRANTE", 
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-              Text("De: ${_currentCall?.remote_display_name ?? 'Portero'}", 
-                  style: const TextStyle(fontSize: 18, color: Colors.white)),
-              const SizedBox(height: 300), // Espacio libre para ver la imagen
+              const Text("📞 LLAMADA ENTRANTE", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text("De: ${_currentCall?.remote_display_name ?? 'Portero'}", style: const TextStyle(fontSize: 18, color: Colors.white)),
+              const SizedBox(height: 300),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // Botón Colgar
                   FloatingActionButton(
                     onPressed: _colgar,
                     backgroundColor: Colors.red,
                     heroTag: "btnColgar",
                     child: const Icon(Icons.call_end),
                   ),
-                  // Botón Contestar
                   FloatingActionButton(
                     onPressed: _contestar,
                     backgroundColor: Colors.green,
