@@ -13,64 +13,54 @@ class SIPService implements SipUaHelperListener {
 
   SIPUAHelper get helper => _helper;
 
-void register(String extension, String password, String serverIP) {
+  void register(String extension, String password, String serverIP) {
     final UaSettings settings = UaSettings();
 
-    // 1. DEFINIR EL TIPO DE TRANSPORTE (Esto es lo que probablemente faltaba)
+    // IMPORTANTE: Usamos WS (no WSS aún) y el puerto 8088
     settings.transportType = TransportType.WS; 
-
-    // 2. Configuración de Red
-    settings.webSocketUrl = 'ws://$serverIP:9088/ws';
+    settings.webSocketUrl = 'ws://$serverIP:8088/ws';
     settings.uri = 'sip:$extension@$serverIP';
     
-    // 3. Credenciales
     settings.authorizationUser = extension;
     settings.password = password;
     settings.displayName = "Depto $extension";
     
-    // 4. Configuración Técnica Extra
-    settings.userAgent = 'Dart SIP Client v1.0';
+    settings.userAgent = 'RomVal App';
     settings.dtmfMode = DtmfMode.RFC2833;
-    settings.register = true; // Confirmamos que queremos registrarnos
+    settings.register = true;
     
-    // 5. Configuración WebRTC/Seguridad
+    // CRÍTICO PARA RED LOCAL: Permitir certificados sin SSL real
     settings.webSocketSettings.allowBadCertificate = true; 
-    settings.webSocketSettings.userAgent = 'Dart SIP Client v1.0';
+    settings.webSocketSettings.userAgent = 'RomVal App';
     
-    // 6. Evitar nulos en listas (Blindaje extra)
-    settings.iceServers = []; 
+    settings.iceServers = []; // Sin STUN para local (más rápido)
 
     _helper.start(settings);
   }
-  // --- MÉTODOS OBLIGATORIOS (NOMBRES CORREGIDOS) ---
+
+  // --- MÉTODOS OBLIGATORIOS (Listeners) ---
 
   @override
   void transportStateChanged(TransportState state) {
-    print("Transporte: ${state.state}");
+    print("📢 SIP Transporte: ${state.state}");
   }
 
   @override
   void registrationStateChanged(RegistrationState state) {
-    print("Registro: ${state.state}");
+    print("✅ SIP Registro: ${state.state}");
   }
 
   @override
   void callStateChanged(Call call, CallState state) {
-    print("Llamada: ${state.state}");
+    print("📞 SIP Llamada: ${state.state}");
   }
   
   @override
-  void onNewMessage(SIPMessageRequest msg) {
-    // Este sí lleva 'on'
-  }
+  void onNewMessage(SIPMessageRequest msg) {}
   
   @override
-  void onNewNotify(Notify ntf) {
-    // Este sí lleva 'on'
-  }
+  void onNewNotify(Notify ntf) {}
   
   @override
-  void onNewReinvite(ReInvite event) {
-    // TODO: implement onNewReinvite
-  }
+  void onNewReinvite(ReInvite event) {}
 }

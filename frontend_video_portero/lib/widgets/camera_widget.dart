@@ -23,25 +23,24 @@ class _CameraWidgetState extends State<CameraWidget> {
     controller = VideoController(
       player,
       configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: false, // Mantener false por ahora
+        enableHardwareAcceleration: false, // Intentamos activar aceleración
       ),
     );
 
-    // Escuchar errores
     player.stream.error.listen((error) {
       print("🚨 ERROR MEDIA_KIT: $error");
     });
 
-    // ABRIR EN MODO COMPATIBILIDAD
-    // Quitamos 'nobuffer' y 'analyzeduration' para dejar que detecte el formato
+    // CONFIGURACIÓN DE BAJA LATENCIA (REALTIME)
     player.open(
       Media(
         widget.rtspUrl,
         extras: {
-          'rtsp_transport': 'tcp', // TCP sigue siendo vital para no perder paquetes
-          // Si sigue fallando, prueba descomentar la siguiente línea para forzar ffmpeg a analizar más profundo:
-          // 'probesize': '10000000', // 10MB de análisis
-          // 'analyzeduration': '5000000', // 5 segundos de análisis
+          'rtsp_transport': 'tcp', 
+          'fflags': 'nobuffer',      // Clave: No guardar buffer
+          'analyzeduration': '0',    // Clave: No analizar
+          'probesize': '32',         // Mínimo posible
+          'dead_link_interval': '1', // Detectar caída rápido
         },
       ),
       play: true,
@@ -58,27 +57,12 @@ class _CameraWidgetState extends State<CameraWidget> {
   Widget build(BuildContext context) {
     return Container(
       color: Colors.black,
-      child: Stack(
-        children: [
-          Center(
-            child: Video(
-              controller: controller,
-              fit: BoxFit.cover,
-              controls: NoVideoControls,
-            ),
-          ),
-          Center(
-            child: StreamBuilder<bool>(
-              stream: player.stream.buffering,
-              builder: (context, snapshot) {
-                if (snapshot.data == true) {
-                  return const CircularProgressIndicator(color: Colors.white);
-                }
-                return const SizedBox();
-              },
-            ),
-          ),
-        ],
+      child: Center(
+        child: Video(
+          controller: controller,
+          fit: BoxFit.cover,
+          controls: NoVideoControls,
+        ),
       ),
     );
   }
